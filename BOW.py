@@ -1,114 +1,127 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Nov 27 20:59:54 2014
-
-@author: olga
-
-BOW 2 KERNEL test=0.8 0.945
+FROM: https://yadi.sk/i/XueHw94udPoH9
+BOW 2 KERNEL 
 """
+
 from sklearn.svm import SVC
-from sklearn import cross_validation as cv
 import nltk
+import re
+import string
 
-alf='abcdefghijklmnopqrstuvwxyz'
+ALF = [chr(i) for i in range(ord('a'), ord('z') + 1)] + [chr(i)
+        for i in range(ord('A'), ord('Z') + 1)]
 
-def makeadic(a):
-    pars=[]
-    global alf, collection
-    for i in a:
-        dic={}
-        text=nltk.word_tokenize(i)
-        for i in text:
-            if i[0] in alf:
-                if i in dic:
-                    dic[i]+=1
-                else:
-                    dic[i]=1
-        vector=[]
-        for i in collection:
-            if i in dic:
-                vector.append(dic[i])
-            else:
-                vector.append(0)
-        pars.append(vector)
-    return pars
 
-def makecollection(a):
-    global alf
-    pars=[]
-    text=[]
-    text1=nltk.word_tokenize(i)
-    for j in text1:
-        if j[0] in alf:
-            text.append(j)
-    text=set(text)
-    text=text-stop_words
-    pars.extend(list(text))
-    return pars
+def dot(x, y):
+    return sum(i[0] * i[1] for i in zip(x, y))
+
+def make_collection(docs):
+    text = ''    
+    ''' слияние текстов '''
+    for i in docs:
+        text = text+i[:-2]+' '
+    text = text[:-1]
+    ''' теги чисел '''
+    match = re.findall(r'[0-9]+[.,/]*[0-9]*', text)
+    for i in sorted(match,key = len, reverse = True):                                       
+        text = string.replace(text,i,' ')    
+    ''' чистка символов '''   
+    for i in ['(',')','-','/',',']:
+        text = string.replace(text,i,' ') 
+    ''' лишние \w '''
+    match = re.findall(r' +',text)
+    for i in match:
+        text = string.replace(text,i,' ')
+        
+    return set(nltk.word_tokenize(text)) - STOP_WORDS
+
+def make_dic(doc):
+    dic = {}
+    for word in doc.split():
+        if word in dic:
+            dic[word] += 1
+        else:
+            dic[word] = 1
+    return dic
     
-def dot(x,y):
-    return sum(i[0]*i[1] for i in zip(x,y))    
+                
+def make_vector(dic, collection):
+    vector = []
+    for word in collection:
+        if word in dic:
+            vector.append(dic[word])
+        else:
+            vector.append(0)
+    return vector
 
+def make_pars(docs):
+    global collection
+    return [make_vector(make_dic(doc), collection) for doc in docs]
 
-### reading data ###
-
-stop_words=[]
-stop_words1=open('stop_words.txt', 'r').readlines()
-for i in stop_words1:
-    stop_words.append(i.strip('\n'))
-stop_words=set(stop_words)    
+def del_n(doc):
+    return string.replace(doc[:-1], '/n', ' ')
     
+def make_kernel(x, y):
+    Kernel = []
+    if x != y:
+        for i in make_pars(x):
+            t = []
+            for j in make_pars(y):
+                t.append(dot(i, j))
+            Kernel.append(t)
+    else:
+        parse = make_pars(x)
+        for i in parse:
+            t = []
+            for j in parse:
+                t.append(dot(i, j))
+            Kernel.append(t)
+    return Kernel
 
-f = open('train_set_texts.txt','r')
+
+
+''' reading data '''
+
+STOP_WORDS = set([i.strip('\n') for i in open('stop_words.txt', 'r'
+                 ).readlines()])
+
+f = open('train_set_texts.txt', 'r')
 X = []
 y = []
 
 for i in f:
-    label,text = i.split('\t')
+    (label, text) = i.split('\t')
     X.append(text)
     y.append(label)
-    
-    
+
+X_train = X
+X_test = X[30:35]
+y_train = y
+y_test = y[30:35]
 
     
-### cross validation ###
-X_train, X_test, y_train, y_test = cv.train_test_split(X, y, test_size=0.8, random_state=0)
 
-### make collection of words ###
-collection=[]
+''' make collection of words '''
+
+collection = []
 for i in X:
-    collection.extend(makecollection(i))
+    collection.extend(make_collection(i))
 
-### Creating model ###
+''' Creating model '''
 model = SVC(kernel='precomputed')
    
-### loading kernel + fiting model ###
-# loading
-X_parsed=makeadic(X_train)
-Kernel = []
-for i in X_parsed:
-    t = []
-    for j in X_parsed:
-        t.append(dot(i,j))
-    Kernel.append(t)
-# fiting
-model.fit(Kernel, y_train)
+''' loading kernel + fiting model '''
 
-### loading train set + predicting labels ###
-X_t_parsed=makeadic(X_test)
-Kernel_t = []
-for i in X_t_parsed:
-    t = []
-    for j in X_parsed:
-        t.append(dot(i,j))
-    Kernel_t.append(t)
- 
-y_predicted=model.predict(Kernel_t)
+model.fit(make_kernel(X_train, X_train), y_train)
 
+''' loading train set + predicting labels '''
 
-n=0
+y_predicted = model.predict(make_kernel(X_test, X_train))
+
+n = 0
 for i in range(len(y_predicted)):
-    if y_test[i]==y_predicted[i]:
-        n+=1
-    
+    if y_test[i] == y_predicted[i]:
+        n += 1
+
 print n, len(y_predicted)
