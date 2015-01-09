@@ -4,120 +4,100 @@ FROM: https://yadi.sk/i/XueHw94udPoH9
 BOW 2 KERNEL 
 """
 
-from sklearn.svm import SVC
-import nltk
 import re
-import string
-
-ALF = [chr(i) for i in range(ord('a'), ord('z') + 1)] + [chr(i)
-        for i in range(ord('A'), ord('Z') + 1)]
+from sklearn.svm import SVC
+import numpy as np
 
 
-def dot(x, y):
-    return sum(i[0] * i[1] for i in zip(x, y))
+def make_collection (docs):
+    
+    exprTire = re.compile('[a-z]+-[a-z]+')
+    exprWords = re.compile('[a-z]+')
 
-def make_collection(docs):
-    text = ''    
-    ''' слияние текстов '''
-    for i in docs:
-        text = text+i[:-2]+' '
-    text = text[:-1]
-    ''' теги чисел '''
-    match = re.findall(r'[0-9]+[.,/]*[0-9]*', text)
-    for i in sorted(match,key = len, reverse = True):                                       
-        text = string.replace(text,i,' ')    
-    ''' чистка символов '''   
-    for i in ['(',')','-','/',',']:
-        text = string.replace(text,i,' ') 
-    ''' лишние \w '''
-    match = re.findall(r' +',text)
-    for i in match:
-        text = string.replace(text,i,' ')
+    collection = []
+    
+    for doc in docs:
         
-    return set(nltk.word_tokenize(text)) - STOP_WORDS
-
-def make_dic(doc):
-    dic = {}
-    for word in doc.split():
-        if word in dic:
-            dic[word] += 1
-        else:
-            dic[word] = 1
-    return dic
-    
+        # finding words #
+        wordsList = exprWords.findall(doc)
+        tireList = exprTire.findall(doc)
+        
+        tireParsed = []
+        for i in range(len(tireList)):
+            tireParsed.extend(tireList[i].split('-'))
+ 
+        # del tire #
+        for i in tireParsed:
+            if i in wordsList:
+                del wordsList[wordsList.index(i)]
                 
-def make_vector(dic, collection):
-    vector = []
-    for word in collection:
-        if word in dic:
-            vector.append(dic[word])
-        else:
-            vector.append(0)
-    return vector
-
-def make_pars(docs):
-    global collection
-    return [make_vector(make_dic(doc), collection) for doc in docs]
-
-def del_n(doc):
-    return string.replace(doc[:-1], '/n', ' ')
+        wordsList += tireList
+        partCollection = list(set(wordsList) - STOP_WORDS)
+        
+        collection.extend(partCollection)
     
-def make_kernel(x, y):
-    Kernel = []
-    if x != y:
-        for i in make_pars(x):
-            t = []
-            for j in make_pars(y):
-                t.append(dot(i, j))
-            Kernel.append(t)
-    else:
-        parse = make_pars(x)
-        for i in parse:
-            t = []
-            for j in parse:
-                t.append(dot(i, j))
-            Kernel.append(t)
-    return Kernel
+    return list(set(collection))
 
 
 
-''' reading data '''
+def make_vectors(docs):
+    global collection
+    pars = []
+    for doc in docs:
+        vector = []
+        for word in collection:
+            expr = re.compile(word)
+            vector.append(len(expr.findall(doc)))
+        pars.append(vector)
+    return pars
+
+
 
 STOP_WORDS = set([i.strip('\n') for i in open('stop_words.txt', 'r'
                  ).readlines()])
 
-f = open('train_set_texts.txt', 'r')
-X = []
-y = []
+### reading data ###
+X_train = [open('DATA/DATA1/80-20/TrainSet/train{0}.txt'.format(i)).read() for i in xrange(1600) ]
+y_train = [i.strip() for i in open('DATA/DATA1/80-20/train_set_lables.txt').readlines()]
 
-for i in f:
-    (label, text) = i.split('\t')
-    X.append(text)
-    y.append(label)
+X_test = [open('DATA/DATA1/80-20/TestSet/test{0}.txt'.format(i)).read() for i in xrange(400) ]
+y_test = [i.strip() for i in open('DATA/DATA1/80-20/test_set_lables.txt').readlines()]
 
-X_train = X
-X_test = X[30:35]
-y_train = y
-y_test = y[30:35]
+# making bag of words #
+collection = make_collection(X_train)
 
-    
+# making vectors #
+vectorsTrain = make_vectors(X_train)
+vectorsTest = make_vectors(X_test)
 
-''' make collection of words '''
-
-collection = []
-for i in X:
-    collection.extend(make_collection(i))
-
-''' Creating model '''
+# Creating model #
 model = SVC(kernel='precomputed')
    
-''' loading kernel + fiting model '''
+# loading kernel + fiting model #
 
-model.fit(make_kernel(X_train, X_train), y_train)
+kernelTrain = []
+for vector in vectorsTrain:
+    t = []
+    for vector1 in vectorsTrain:
+        t.append(np.dot(vector, vector1))
+    kernelTrain.append(t)
+    
 
-''' loading train set + predicting labels '''
+model.fit(kernelTrain, y_train)
 
-y_predicted = model.predict(make_kernel(X_test, X_train))
+# loading train set + predicting labels #
+
+kernelTest = []
+for vector in vectorsTest:
+    t = []
+    for vector1 in vectorsTrain:
+        t.append(np.dot(vector, vector1))
+    kernelTest.append(t)
+    
+    
+y_predicted = model.predict(kernelTest)
+
+# score #
 
 n = 0
 for i in range(len(y_predicted)):
