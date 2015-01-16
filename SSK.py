@@ -33,8 +33,7 @@ def make_vectors(docs):
     pars = []
     for doc in docs:
         vector = []
-        for stri in collection:
-            expr = re.compile(stri)
+        for expr in regCollection:
             vector.append(len(expr.findall(doc)))
         pars.append(vector)
     return pars
@@ -48,17 +47,21 @@ y_train = [i.strip() for i in open('DATA/DP/train_set_lables.txt').readlines()]
 X_test = [open('DATA/DP/TestSet/test{0}.txt'.format(i)).read() for i in xrange(790, 812) ]
 y_test = [i.strip() for i in open('DATA/DP/test_set_lables.txt').readlines()]
 
+print "Making a collection"
 collection = make_collection(X_train, n)
+regCollection = [re.compile(i) for i in collection]
 
 # making vectors #
+print "Making vectors"
 vectorsTrain = make_vectors(X_train)
 vectorsTest = make_vectors(X_test)
 
 # Creating model #
+print "Creating model"
 model = SVC(kernel='precomputed')
    
 # loading kernel + fiting model #
-
+print "Creating kernel"
 kernelTrain = []
 for vector in vectorsTrain:
     t = []
@@ -66,11 +69,11 @@ for vector in vectorsTrain:
         t.append(np.dot(vector, vector1))
     kernelTrain.append(t)
     
-
+print "Fitting model"
 model.fit(kernelTrain, y_train)
 
 # loading train set + predicting labels #
-
+print "Creating test set"
 kernelTest = []
 for vector in vectorsTest:
     t = []
@@ -78,11 +81,11 @@ for vector in vectorsTest:
         t.append(np.dot(vector, vector1))
     kernelTest.append(t)
     
-    
+print "Predicting"
 y_predicted = model.predict(kernelTest)
 
 # score #
-
+print "################ RESULT ##################"
 n = 0
 for i in range(len(y_predicted)):
     if y_test[i] == y_predicted[i]:
